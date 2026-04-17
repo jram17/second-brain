@@ -1,0 +1,48 @@
+syntax = "proto3";
+package auth;
+option go_package = "github.com/jram17/second-brain/gen/go/auth";
+
+
+message LoginRequest{
+    string email =1;
+    string password =2;
+}
+
+message LoginResponse{
+    string accessToken =1;
+    string refreshToken =2;
+}
+
+message SignupRequest{
+    string username =1;
+    string email =2;
+    string password=3;
+}
+
+message SignupResponse{
+    string accessToken=1;
+    string refreshToken=2;
+}
+
+message ValidateRequest{
+    string accessToken=1;
+}
+message ValidateResponse{
+    string userid=1;
+    bool valid=2;
+}
+
+message RefreshTokenRequest{
+    string refreshToken=1;
+}
+message RefreshTokenResponse{
+    string accessToken=1;
+    string refreshToken=2;
+}
+
+service AuthService{
+    rpc Login(LoginRequest) returns(LoginResponse);
+    rpc Signup(SignupRequest) returns(SignupResponse);
+    rpc ValidateToken(ValidateRequest) returns(ValidateResponse);
+    rpc RefreshToken(RefreshTokenRequest) returns(RefreshTokenResponse);
+}
