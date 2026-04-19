@@ -2,7 +2,10 @@ module github.com/jram17/second-brain/services/auth
 
 go 1.22.2
 
-require go.mongodb.org/mongo-driver v1.17.9
+require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	go.mongodb.org/mongo-driver v1.17.9
+)
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect

@@ -1,6 +1,7 @@
 syntax = "proto3";
 package auth;
-option go_package = "github.com/jram17/second-brain/gen/go/auth";
+option go_package = "github.com/jram17/second-brain/services/auth/pkg/pb";
+
 
 
 message LoginRequest{
