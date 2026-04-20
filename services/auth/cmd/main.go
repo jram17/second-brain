@@ -16,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 		log.Fatal("failed to ping mongo:", err)
 	}
 	//load the collection
-	collection := client.Database(os.Getenv("MONGO_DB")).Collection("users")
+	collection := client.Database(os.Getenv("DB_NAME")).Collection("users")
 	store := model.NewStore(collection)
 	jwtmaker, err := jwt.NewMaker(os.Getenv("JWT_SECRET"))
 	if err != nil {
@@ -47,6 +48,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(store, jwtmaker)
 	grpcServer := grpc.NewServer()
 	pb.RegisterAuthServiceServer(grpcServer, authHandler)
+	reflection.Register(grpcServer)
 
 	port := os.Getenv("GRPC_PORT")
 	listener, err := net.Listen("tcp", ":"+port)
