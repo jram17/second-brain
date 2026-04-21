@@ -20,9 +20,14 @@ func main(){
 		return 
 	}
 	authServerAdd:=os.Getenv("AUTH_SERVICE_ADDR")
+	contentServerAdd:=os.Getenv("CONTENT_SERVICE_ADDR")
 	httpPort :=os.Getenv("HTTP_PORT")
 	if authServerAdd== "" {
 		log.Fatal("AUTH_SERVICE_ADDR is not set")
+		return
+	}
+	if contentServerAdd == "" {
+		log.Fatal("CONTENT_SERVICE_ADDR is not set")
 		return
 	}
 	if httpPort == "" {
@@ -31,18 +36,30 @@ func main(){
 
 	}
 	//create a grpc connection
-	conn,err:= grpc.Dial(
+	authconn,err:= grpc.NewClient(
 		authServerAdd,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err!=nil{
 		log.Fatalf("failed to connect the  auth service: %v", err)
 	}
-	defer conn.Close()
+	defer authconn.Close()
+
+	contentconn,err:=grpc.NewClient(
+		contentServerAdd,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err!=nil{
+		log.Fatalf("failed to connect the content service: %v", err)
+	}
+	defer contentconn.Close()
 
 	//create a grpc client
-	authClient:=pb.NewAuthServiceClient(conn)
+	authClient:=pb.NewAuthServiceClient(authconn)
 	authHandler:=handler.NewAuthGatewayHandler(authClient)
+	contentClient:=pb.NewContentServiceClient(contentconn)
+	contentHandler:=handler.NewContentGatewayHandler(contentClient)
+
 	//create a gin router
 	r:=gin.Default()
 	auth:= r.Group("/api/auth")
@@ -56,6 +73,10 @@ func main(){
 	protected.Use(middleware.AuthMiddleware(authClient))
 	{
 		//future protected routes
+		// routues for content
+		protected.POST("/content",contentHandler.AddContent)
+		protected.GET("/content",contentHandler.GetContents)
+		protected.DELETE("/content/:id",contentHandler.DeleteContent)
 	}
 
 	//start the server
