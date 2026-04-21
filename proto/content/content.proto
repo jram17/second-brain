@@ -1,0 +1,48 @@
+syntax = "proto3";
+package content;
+option go_package = "github.com/jram17/second-brain/services/content/pkg/pb";
+
+message AddContentRequest {
+    string userId = 1;
+    string contentType = 2;
+    string content = 3;
+    string title = 4;
+}
+
+message Content {
+    string id = 1;
+    string userId = 2;
+    string contentType = 3;
+    string title = 4;
+    string description = 5;
+    string imageUrl = 6;
+    string content = 7;
+    int64 createdAt = 8;
+}
+
+message AddContentResponse {
+    Content content = 1;
+}
+
+message GetContentsRequest {
+    string userId = 1;
+}
+
+message GetContentsResponse {
+    repeated Content contents = 1;
+}
+
+message DeleteContentRequest {
+    string id = 1;
+    string userId = 2;
+}
+
+message DeleteContentResponse {
+    bool success = 1;
+}
+
+service ContentService {
+    rpc AddContent(AddContentRequest) returns (AddContentResponse);
+    rpc GetContents(GetContentsRequest) returns (GetContentsResponse);
+    rpc DeleteContent(DeleteContentRequest) returns (DeleteContentResponse);
+}
