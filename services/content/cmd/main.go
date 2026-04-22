@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/jram17/second-brain/services/content/internal/handler"
 	"github.com/jram17/second-brain/services/content/internal/model"
+	"github.com/jram17/second-brain/services/content/internal/vectorstore"
 	pb "github.com/jram17/second-brain/services/content/pkg/pb"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -21,11 +22,12 @@ import (
 func main() {
 	//load the env
 	err := godotenv.Load()
-	if err!=nil{
+	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 	//connect to mongodb
 	mongouri := os.Getenv("MONGO_URI")
+	qdranturi := os.Getenv("QDRANT_ADDR")
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongouri))
 	if err != nil {
 		log.Fatal("failed to connect to mongo :", err)
@@ -40,8 +42,13 @@ func main() {
 	//load the collection
 	collection := client.Database(os.Getenv("DB_NAME")).Collection("contents")
 	store := model.NewStore(collection)
-	contentHandler :=handler.NewContentHandler(store)
-	grpcServer :=grpc.NewServer()
+	qdrantstore, err := vectorstore.NewQdrantStore(qdranturi)
+	if err != nil {
+		log.Fatalf("failed to connect to qdrant: %v", err)
+	}
+	defer qdrantstore.Close()
+	contentHandler := handler.NewContentHandler(store,qdrantstore)
+	grpcServer := grpc.NewServer()
 	pb.RegisterContentServiceServer(grpcServer, contentHandler)
 	reflection.Register(grpcServer)
 	port := os.Getenv("GRPC_PORT")

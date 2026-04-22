@@ -4,19 +4,28 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
+	"github.com/jram17/second-brain/services/content/internal/embedder"
 	"github.com/jram17/second-brain/services/content/internal/model"
 	"github.com/jram17/second-brain/services/content/internal/scraper"
+	"github.com/jram17/second-brain/services/content/internal/vectorstore"
 	pb "github.com/jram17/second-brain/services/content/pkg/pb"
 )
 
 type ContentHandler struct {
 	pb.UnimplementedContentServiceServer
 	store *model.Store
+	vectorStore *vectorstore.QdrantStore
 }
 
-//constructor
-func NewContentHandler (store *model.Store) *ContentHandler{
-	return &ContentHandler{store: store}
+// constructor
+func NewContentHandler(store *model.Store ,  vs *vectorstore.QdrantStore) *ContentHandler {
+	return &ContentHandler{store: store, vectorStore: vs}
+}
+
+//helper deterministic uuid creater
+func vectorID(contentID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(contentID)).String()
 }
 
 func (h *ContentHandler) AddContent(ctx context.Context, req *pb.AddContentRequest) (*pb.AddContentResponse, error) {
@@ -51,6 +60,25 @@ func (h *ContentHandler) AddContent(ctx context.Context, req *pb.AddContentReque
 	if err != nil {
 		return nil, err
 	}
+	//insert into the qdrant vector db here
+	text := content.Title + " " + content.Description + " " + content.Content
+	vec, err := embedder.Embed(text)
+	if err != nil {
+		// don’t fail request — just log in real system
+		// but for now return error
+		return nil, err
+	}
+	err = h.vectorStore.Upsert(
+		vectorID(content.ID.Hex()),
+		content.UserID,
+		vec,
+		text,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+
 	return &pb.AddContentResponse{
 		Content: &pb.Content{
 			Id:          content.ID.Hex(),
@@ -64,7 +92,6 @@ func (h *ContentHandler) AddContent(ctx context.Context, req *pb.AddContentReque
 		},
 	}, nil
 }
-
 
 func (h *ContentHandler) GetContents(ctx context.Context, req *pb.GetContentsRequest) (*pb.GetContentsResponse, error) {
 	contents, err := h.store.GetContentByUserId(ctx, req.UserId)
@@ -87,10 +114,16 @@ func (h *ContentHandler) GetContents(ctx context.Context, req *pb.GetContentsReq
 	return &pb.GetContentsResponse{Contents: pbContents}, nil
 }
 
-func (h *ContentHandler) DeleteContent(ctx context.Context,req *pb.DeleteContentRequest)(*pb.DeleteContentResponse,error){
-	err:=h.store.DeleteContentByID(ctx,req.Id,req.UserId)
-	if err!=nil{
+func (h *ContentHandler) DeleteContent(ctx context.Context, req *pb.DeleteContentRequest) (*pb.DeleteContentResponse, error) {
+	err := h.store.DeleteContentByID(ctx, req.Id, req.UserId)
+	if err != nil {
 		return nil, err
 	}
-	return &pb.DeleteContentResponse{Success: true},nil
+
+	//delte from qdrant as well
+	err = h.vectorStore.Delete(vectorID(req.Id))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.DeleteContentResponse{Success: true}, nil
 }
