@@ -21,6 +21,7 @@ func main(){
 	}
 	authServerAdd:=os.Getenv("AUTH_SERVICE_ADDR")
 	contentServerAdd:=os.Getenv("CONTENT_SERVICE_ADDR")
+	queryServiceAdd:=os.Getenv("QUERY_SERVICE_URL")
 	httpPort :=os.Getenv("HTTP_PORT")
 	if authServerAdd== "" {
 		log.Fatal("AUTH_SERVICE_ADDR is not set")
@@ -28,6 +29,10 @@ func main(){
 	}
 	if contentServerAdd == "" {
 		log.Fatal("CONTENT_SERVICE_ADDR is not set")
+		return
+	}
+	if queryServiceAdd == "" {
+		log.Fatal("QUERY_SERVICE_URL is not set")
 		return
 	}
 	if httpPort == "" {
@@ -59,6 +64,7 @@ func main(){
 	authHandler:=handler.NewAuthGatewayHandler(authClient)
 	contentClient:=pb.NewContentServiceClient(contentconn)
 	contentHandler:=handler.NewContentGatewayHandler(contentClient)
+	queryHandler:=handler.NewQueryGatewayHandler(queryServiceAdd)
 
 	//create a gin router
 	r:=gin.Default()
@@ -77,6 +83,9 @@ func main(){
 		protected.POST("/content",contentHandler.AddContent)
 		protected.GET("/content",contentHandler.GetContents)
 		protected.DELETE("/content/:id",contentHandler.DeleteContent)
+
+		//route for query
+		protected.POST("/query",queryHandler.Query)
 	}
 
 	//start the server
