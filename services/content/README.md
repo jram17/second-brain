@@ -1,6 +1,6 @@
 # Content Service
 
-gRPC content service for second-brain. Handles storing, retrieving, and deleting user content (links, notes) with automatic metadata scraping via Microlink.
+gRPC content service for second-brain. Handles storing, retrieving, and deleting user content (links, notes) with automatic metadata scraping via Microlink and vector embedding via Ollama + Qdrant.
 
 ## Setup
 
@@ -15,9 +15,17 @@ go mod tidy
 MONGO_URI=<your_mongodb_uri>
 DB_NAME=<your_db_name>
 GRPC_PORT=50052
+QDRANT_ADDR=localhost:6334
 ```
 
-3. Generate proto files (from repo root):
+3. Ensure Ollama and Qdrant are running:
+```bash
+ollama serve
+ollama pull nomic-embed-text
+docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
+```
+
+4. Generate proto files (from repo root):
 ```bash
 protoc --go_out=services/content/pkg/pb --go_opt=module=github.com/jram17/second-brain/services/content/pkg/pb --go-grpc_out=services/content/pkg/pb --go-grpc_opt=module=github.com/jram17/second-brain/services/content/pkg/pb proto/content/content.proto
 ```
