@@ -6,6 +6,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/qdrant/go-client v1.17.1
+	github.com/rabbitmq/amqp091-go v1.11.0
+	github.com/sony/gobreaker v1.0.0
 	go.mongodb.org/mongo-driver v1.17.9
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11

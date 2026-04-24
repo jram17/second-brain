@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jram17/second-brain/services/gateway/pkg/breaker"
 )
 
 type QueryGatewayHandler struct {
@@ -18,6 +19,8 @@ type QueryGatewayHandler struct {
 type QueryRequest struct {
 	Query string `json:"query"`
 }
+
+var queryCB = breaker.New("query-service")
 
 func NewQueryGatewayHandler(queryServiceURL string) *QueryGatewayHandler {
 	return &QueryGatewayHandler{
@@ -42,20 +45,28 @@ func (h *QueryGatewayHandler) Query(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.client.Post(h.queryServiceURL+"/query", "application/json", bytes.NewBuffer(body))
+	result, err := queryCB.Execute(func() (interface{}, error) {
+		resp, err := h.client.Post(h.queryServiceURL+"/query", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		var data map[string]interface{}
+		json.Unmarshal(respBody, &data)
+		return gin.H{"status": resp.StatusCode, "data": data}, nil
+	})
+
 	if err != nil {
-		c.JSON(500, gin.H{"error": "query service unavailable"})
+		c.JSON(503, gin.H{"error": "query service unavailable (circuit open)"})
 		return
 	}
-	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "failed to read response"})
-		return
-	}
-
-	var result map[string]interface{}
-	json.Unmarshal(respBody, &result)
-	c.JSON(resp.StatusCode, result)
+	res := result.(gin.H)
+	c.JSON(res["status"].(int), res["data"])
 }

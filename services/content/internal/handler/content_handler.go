@@ -2,28 +2,37 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"log"
 
 	"github.com/google/uuid"
-	"github.com/jram17/second-brain/services/content/internal/embedder"
 	"github.com/jram17/second-brain/services/content/internal/model"
+	"github.com/jram17/second-brain/services/content/internal/queue"
 	"github.com/jram17/second-brain/services/content/internal/scraper"
 	"github.com/jram17/second-brain/services/content/internal/vectorstore"
 	pb "github.com/jram17/second-brain/services/content/pkg/pb"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type ContentHandler struct {
 	pb.UnimplementedContentServiceServer
-	store *model.Store
+	store       *model.Store
 	vectorStore *vectorstore.QdrantStore
+	mqChannel   *amqp.Channel
 }
 
-// constructor
-func NewContentHandler(store *model.Store ,  vs *vectorstore.QdrantStore) *ContentHandler {
-	return &ContentHandler{store: store, vectorStore: vs}
+type EmbedMessage struct {
+	ContentID string `json:"contentId"`
+	UserID    string `json:"userId"`
+	Text      string `json:"text"`
 }
 
-//helper deterministic uuid creater
+func NewContentHandler(store *model.Store, vs *vectorstore.QdrantStore, mqChannel *amqp.Channel) *ContentHandler {
+	return &ContentHandler{store: store, vectorStore: vs, mqChannel: mqChannel}
+}
+
 func vectorID(contentID string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(contentID)).String()
 }
@@ -31,8 +40,7 @@ func vectorID(contentID string) string {
 func (h *ContentHandler) AddContent(ctx context.Context, req *pb.AddContentRequest) (*pb.AddContentResponse, error) {
 	var content *model.Content
 	var err error
-	//content for type=url is the url
-	//content for type=note is the note itself
+
 	switch req.ContentType {
 	case "note":
 		content, err = h.store.AddContent(ctx, &model.Content{
@@ -60,25 +68,23 @@ func (h *ContentHandler) AddContent(ctx context.Context, req *pb.AddContentReque
 	if err != nil {
 		return nil, err
 	}
-	//insert into the qdrant vector db here
+
+	// publish to queue for async embedding
 	text := content.Title + " " + content.Description + " " + content.Content
-	vec, err := embedder.Embed(text)
-	if err != nil {
-		// don’t fail request — just log in real system
-		// but for now return error
-		return nil, err
-	}
-	err = h.vectorStore.Upsert(
-		vectorID(content.ID.Hex()),
-		content.UserID,
-		vec,
-		text,
-	)
-	if err != nil {
-		return nil, err
-	}
 
-
+	msg, err := json.Marshal(EmbedMessage{
+		ContentID: content.ID.Hex(),
+		UserID:    content.UserID,
+		Text:      text,
+	})
+	if err != nil {
+		log.Printf("err during marshalling data: %v", err)
+	}
+	if err == nil {
+		if pubErr := queue.Publish(h.mqChannel, "embeddings", msg); pubErr != nil {
+			log.Printf("error publishing to queue: %v", pubErr)
+		}
+	}
 	return &pb.AddContentResponse{
 		Content: &pb.Content{
 			Id:          content.ID.Hex(),
@@ -119,11 +125,7 @@ func (h *ContentHandler) DeleteContent(ctx context.Context, req *pb.DeleteConten
 	if err != nil {
 		return nil, err
 	}
-
-	//delte from qdrant as well
-	err = h.vectorStore.Delete(vectorID(req.Id))
-	if err != nil {
-		return nil, err
-	}
+	// delete from qdrant directly (sync is fine for delete)
+	h.vectorStore.Delete(vectorID(req.Id))
 	return &pb.DeleteContentResponse{Success: true}, nil
 }

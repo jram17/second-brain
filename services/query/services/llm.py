@@ -1,8 +1,11 @@
 import os
 import requests
+import pybreaker
+cb = pybreaker.CircuitBreaker(fail_max=3, reset_timeout=30)
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
+@cb
 def generate_answer(query: str, contexts: list[str]) -> str:
     context_text = "\n\n".join(contexts)
 

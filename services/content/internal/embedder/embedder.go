@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/jram17/second-brain/services/content/pkg/breaker"
 )
 
 const ollamaURL = "http://localhost:11434/api/embeddings"
@@ -18,6 +20,8 @@ type embeddingRequest struct {
 type embeddingResponse struct {
 	Embedding []float64 `json:"embedding"`
 }
+
+var cb = breaker.New("ollama-embedder")
 
 func Embed(text string) ([]float32, error) {
 	reqBody := embeddingRequest{
@@ -39,24 +43,33 @@ func Embed(text string) ([]float32, error) {
 
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama returned status %d", resp.StatusCode)
-	}
+	result, err := cb.Execute(func() (interface{}, error) {
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %w", err)
+		}
+		defer resp.Body.Close()
 
-	var res embeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, fmt.Errorf("error decoding response: %w", err)
-	}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("ollama returned status %d", resp.StatusCode)
+		}
 
-	embedding := make([]float32, len(res.Embedding))
-	for i, v := range res.Embedding {
-		embedding[i] = float32(v)
+		var res embeddingResponse
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			return nil, fmt.Errorf("error decoding response: %w", err)
+		}
+		return res.Embedding,nil
+	})
+
+	if err!=nil{
+		return nil,fmt.Errorf("embedding failed (circuit breaker): %w",err)
 	}
-	return embedding, nil
+	//ipo convert the float 64 to 32 cause qdrant expects 32
+	raw := result.([]float64)
+	embeddings := make([]float32,len(raw))
+	for i,v := range raw{
+		embeddings[i] = float32(v)
+	}
+	return embeddings,nil
 }

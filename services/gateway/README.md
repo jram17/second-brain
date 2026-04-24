@@ -1,6 +1,6 @@
 # API Gateway
 
-REST API gateway for second-brain. Translates HTTP requests to gRPC calls (auth, content) and HTTP calls (query). Handles JWT authentication middleware for protected routes.
+REST API gateway for second-brain. Translates HTTP requests to gRPC calls (auth, content) and HTTP calls (query). Handles JWT authentication middleware for protected routes. Circuit breakers on all downstream calls.
 
 ## Setup
 
@@ -25,7 +25,7 @@ cd services/gateway
 go run cmd/main.go
 ```
 
-Requires auth, content, and query services to be running.
+Requires auth, content, query services, and embedding worker to be running.
 
 ## API Endpoints
 
@@ -43,3 +43,7 @@ Requires auth, content, and query services to be running.
 | GET | /api/content | Get all user content |
 | DELETE | /api/content/:id | Delete content by ID |
 | POST | /api/query | Query content using RAG |
+
+## Resilience
+
+Circuit breakers on all downstream calls. If a service is down, returns `503 Service Unavailable` immediately instead of hanging.
