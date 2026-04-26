@@ -1,0 +1,105 @@
+services:
+  # --- Infrastructure ---
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q check_port_connectivity
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # --- Application Services ---
+  auth:
+    build: ./services/auth
+    ports:
+      - "50051:50051"
+    environment:
+      MONGO_URI: mongodb://mongodb:27017
+      DB_NAME: secondbrain
+      JWT_SECRET: supersecretkey-change-me-in-prod!!
+      GRPC_PORT: "50051"
+    depends_on:
+      - mongodb
+
+  content:
+    build: ./services/content
+    ports:
+      - "50052:50052"
+    environment:
+      MONGO_URI: mongodb://mongodb:27017
+      DB_NAME: secondbrain
+      QDRANT_ADDR: qdrant:6334
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      GRPC_PORT: "50052"
+    depends_on:
+      mongodb:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./services/content
+      dockerfile: Dockerfile.Worker
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      QDRANT_ADDR: qdrant:6334
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  query:
+    build: ./services/query
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_URL: http://host.docker.internal:11434
+      QDRANT_URL: http://qdrant:6333
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - qdrant
+
+  gateway:
+    build: ./services/gateway
+    ports:
+      - "8080:8080"
+    environment:
+      AUTH_SERVICE_ADDR: auth:50051
+      CONTENT_SERVICE_ADDR: content:50052
+      QUERY_SERVICE_URL: http://query:8000
+      HTTP_PORT: "8080"
+    depends_on:
+      - auth
+      - content
+      - query
+
+volumes:
+  mongo_data:
+  qdrant_data:

@@ -21,10 +21,7 @@ import (
 
 func main() {
 	//load the env
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading the .env file")
-	}
+	_ = godotenv.Load()
 	//connect the db
 	mongouri := os.Getenv("MONGO_URI")
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongouri))

@@ -22,10 +22,7 @@ import (
 
 func main() {
 	//load the env
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
+	_ = godotenv.Load()
 	//connect to mongodb
 	mongouri := os.Getenv("MONGO_URI")
 	qdranturi := os.Getenv("QDRANT_ADDR")

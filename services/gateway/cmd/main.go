@@ -15,10 +15,7 @@ import (
 
 func main(){
 	//load the env
-	if err:=godotenv.Load();err!=nil{
-		log.Fatal("error loading the env")
-		return 
-	}
+	_ = godotenv.Load()
 	authServerAdd:=os.Getenv("AUTH_SERVICE_ADDR")
 	contentServerAdd:=os.Getenv("CONTENT_SERVICE_ADDR")
 	queryServiceAdd:=os.Getenv("QUERY_SERVICE_URL")

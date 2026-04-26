@@ -2,8 +2,10 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/sony/gobreaker"
 	"github.com/jram17/second-brain/services/gateway/pkg/breaker"
 	pb "github.com/jram17/second-brain/services/gateway/pkg/pb"
+	"google.golang.org/grpc/status"
 )
 
 type ContentGatewayHandler struct {
@@ -24,6 +26,18 @@ func NewContentGatewayHandler(client pb.ContentServiceClient) *ContentGatewayHan
 	}
 }
 
+func handleContentError(c *gin.Context, err error) {
+	if err == gobreaker.ErrOpenState || err == gobreaker.ErrTooManyRequests {
+		c.JSON(503, gin.H{"error": "content service unavailable"})
+		return
+	}
+	if s, ok := status.FromError(err); ok {
+		c.JSON(400, gin.H{"error": s.Message()})
+		return
+	}
+	c.JSON(500, gin.H{"error": err.Error()})
+}
+
 func (h *ContentGatewayHandler) AddContent(c *gin.Context) {
 	var req AddContentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -39,7 +53,7 @@ func (h *ContentGatewayHandler) AddContent(c *gin.Context) {
 		})
 	})
 	if err != nil {
-		c.JSON(503, gin.H{"error": "content service unavailable"})
+		handleContentError(c, err)
 		return
 	}
 	res := result.(*pb.AddContentResponse)
@@ -55,7 +69,7 @@ func (h *ContentGatewayHandler) GetContents(c *gin.Context) {
 		})
 	})
 	if err != nil {
-		c.JSON(503, gin.H{"error": "content service unavailable"})
+		handleContentError(c, err)
 		return
 	}
 	res := result.(*pb.GetContentsResponse)
@@ -72,7 +86,7 @@ func (h *ContentGatewayHandler) DeleteContent(c *gin.Context) {
 		})
 	})
 	if err != nil {
-		c.JSON(503, gin.H{"error": "content service unavailable"})
+		handleContentError(c, err)
 		return
 	}
 	res := result.(*pb.DeleteContentResponse)

@@ -6,12 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/jram17/second-brain/services/content/pkg/breaker"
 )
 
-const ollamaURL = "http://localhost:11434/api/embeddings"
+func getOllamaURL() string {
+	if u := os.Getenv("OLLAMA_URL"); u != "" {
+		return u + "/api/embeddings"
+	}
+	return "http://localhost:11434/api/embeddings"
+}
 
 type embeddingRequest struct {
 	Model  string `json:"model"`
@@ -36,7 +42,7 @@ func Embed(text string) ([]float32, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", ollamaURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", getOllamaURL(), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
