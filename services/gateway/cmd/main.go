@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/jram17/second-brain/services/gateway/internal/handler"
 	"github.com/jram17/second-brain/services/gateway/internal/middleware"
+	"github.com/jram17/second-brain/services/gateway/pkg/cache"
 	pb "github.com/jram17/second-brain/services/gateway/pkg/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,6 +64,19 @@ func main(){
 	contentHandler:=handler.NewContentGatewayHandler(contentClient)
 	queryHandler:=handler.NewQueryGatewayHandler(queryServiceAdd)
 
+	// connect to redis (optional, graceful fallback)
+	var redisCache *cache.RedisCache
+	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
+		rc, err := cache.New(redisAddr)
+		if err != nil {
+			log.Printf("redis unavailable, running without cache: %v", err)
+		} else {
+			redisCache = rc
+			defer rc.Close()
+			log.Println("redis cache connected")
+		}
+	}
+
 	//create a gin router
 	r:=gin.Default()
 	auth:= r.Group("/api/auth")
@@ -73,7 +87,7 @@ func main(){
 	}
 	
 	protected:=r.Group("/api")
-	protected.Use(middleware.AuthMiddleware(authClient))
+	protected.Use(middleware.AuthMiddleware(authClient, redisCache))
 	{
 		//future protected routes
 		// routues for content

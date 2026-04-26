@@ -8,12 +8,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jram17/second-brain/services/gateway/pkg/breaker"
+	"github.com/jram17/second-brain/services/gateway/pkg/cache"
 	pb "github.com/jram17/second-brain/services/gateway/pkg/pb"
 )
 
 var authMiddlewareCB = breaker.New("auth-validate")
 
-func AuthMiddleware(authClient pb.AuthServiceClient) gin.HandlerFunc {
+func AuthMiddleware(authClient pb.AuthServiceClient, redisCache *cache.RedisCache) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -27,6 +28,16 @@ func AuthMiddleware(authClient pb.AuthServiceClient) gin.HandlerFunc {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Check Redis cache first
+		if redisCache != nil {
+			if userId, err := redisCache.Get(c.Request.Context(), "jwt:"+token); err == nil {
+				c.Set("userId", userId)
+				c.Next()
+				return
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 
@@ -47,6 +58,12 @@ func AuthMiddleware(authClient pb.AuthServiceClient) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+
+		// Cache the valid token -> userId mapping (5 min TTL)
+		if redisCache != nil {
+			_ = redisCache.Set(c.Request.Context(), "jwt:"+token, res.Userid, 5*time.Minute)
+		}
+
 		c.Set("userId", res.Userid)
 		c.Next()
 	}

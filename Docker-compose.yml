@@ -27,6 +27,9 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  redis:
+    image: redis:7-alpine
+
   # --- Application Services ---
   auth:
     build: ./services/auth
@@ -95,10 +98,19 @@ services:
       CONTENT_SERVICE_ADDR: content:50052
       QUERY_SERVICE_URL: http://query:8000
       HTTP_PORT: "8080"
+      REDIS_ADDR: redis:6379
     depends_on:
       - auth
       - content
       - query
+      - redis
+
+  dozzle:
+    image: amir20/dozzle
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   mongo_data:
